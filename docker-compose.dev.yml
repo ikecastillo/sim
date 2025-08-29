@@ -1,0 +1,98 @@
+name: sim-dev-setup
+
+services:
+  # Main Sim Studio Application
+  simstudio:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    ports:
+      - '3000:3000'
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+    environment:
+      # Core Application
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      
+      # Database - Your external PostgreSQL
+      - DATABASE_URL=postgresql://i.castillo2:Rufus!7415@psqldb-k-kashmiryclust-kkashmiry0641.dbuser:5432/SnowLeopard
+      
+      # Application URLs
+      - BETTER_AUTH_URL=http://localhost:3000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - NEXT_PUBLIC_SOCKET_URL=http://localhost:3002
+      - SOCKET_SERVER_URL=http://localhost:3002
+      
+      # Security - Auto-generated secrets
+      - BETTER_AUTH_SECRET=9d041caead5ce683dee53bb1300f70d70e795fb97661a1c5794a8d0ea98419c2
+      - ENCRYPTION_KEY=36150d4efbf462e82daf6548df3570a2ab1cb15ba5d96ab73f0f9288201d33c8
+      - INTERNAL_API_SECRET=9d041caead5ce683dee53bb1300f70d70e795fb97661a1c5794a8d0ea98419c2
+      
+      # AI/LLM - Local Ollama
+      - OLLAMA_URL=http://host.docker.internal:11434
+      
+      # Optional features (disabled)
+      - BILLING_ENABLED=false
+      - NEXT_PUBLIC_BILLING_ENABLED=false
+      - TRIGGER_DEV_ENABLED=false
+      - NEXT_PUBLIC_TRIGGER_DEV_ENABLED=false
+      - DISABLE_REGISTRATION=false
+      - LOG_LEVEL=DEBUG
+      
+      # Placeholders for optional services
+      - GOOGLE_CLIENT_ID=placeholder
+      - GOOGLE_CLIENT_SECRET=placeholder
+      - GITHUB_CLIENT_ID=placeholder
+      - GITHUB_CLIENT_SECRET=placeholder
+      - RESEND_API_KEY=placeholder
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      realtime:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '--quiet', 'http://127.0.0.1:3000']
+      interval: 90s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Realtime Socket Server
+  realtime:
+    build:
+      context: .
+      dockerfile: docker/realtime.Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://i.castillo2:Rufus!7415@psqldb-k-kashmiryclust-kkashmiry0641.dbuser:5432/SnowLeopard
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - BETTER_AUTH_URL=http://localhost:3000
+      - BETTER_AUTH_SECRET=9d041caead5ce683dee53bb1300f70d70e795fb97661a1c5794a8d0ea98419c2
+    restart: unless-stopped
+    ports:
+      - '3002:3002'
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '--quiet', 'http://127.0.0.1:3002/health']
+      interval: 90s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Database Migrations (for your external PostgreSQL)
+  migrations:
+    build:
+      context: .
+      dockerfile: docker/db.Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://i.castillo2:Rufus!7415@psqldb-k-kashmiryclust-kkashmiry0641.dbuser:5432/SnowLeopard
+    command: ['bun', 'run', 'db:migrate']
+    restart: 'no'
